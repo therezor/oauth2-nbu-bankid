@@ -3,6 +3,7 @@
 namespace TheRezor\OAuth2\Client\Provider\Exception;
 
 use Psr\Http\Message\ResponseInterface;
+use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 
 class BankIDIdentityProviderException extends IdentityProviderException
 {

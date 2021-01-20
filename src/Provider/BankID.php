@@ -2,6 +2,8 @@
 
 namespace TheRezor\OAuth2\Client\Provider;
 
+use TheRezor\OAuth2\Client\Cipher\EUSign;
+use TheRezor\OAuth2\Client\Cipher\CipherInterface;
 use TheRezor\OAuth2\Client\Provider\Exception\BankIDIdentityProviderException;
 use League\OAuth2\Client\Provider\Exception\IdentityProviderException;
 use League\OAuth2\Client\Provider\ResourceOwnerInterface;
@@ -15,6 +17,16 @@ class BankID extends AbstractProvider
 {
     use BearerAuthorizationTrait;
 
+    public function __construct(array $options = [], array $collaborators = [])
+    {
+        parent::__construct($options, $collaborators);
+
+        if (empty($collaborators['cipher'])) {
+            $collaborators['cipher'] = new EUSign($this->getKey(), $this->getPassword());
+        }
+        $this->setCipher($collaborators['cipher']);
+    }
+
     /**
      * @var string Key used in a token response to identify the resource owner.
      */
@@ -26,6 +38,11 @@ class BankID extends AbstractProvider
      * @var string
      */
     protected $host = 'https://id.bank.gov.ua';
+
+    /**
+     * @var CipherInterface
+     */
+    protected $cipher;
 
     protected $fields = [
         'firstName',
@@ -79,6 +96,29 @@ class BankID extends AbstractProvider
 
     protected $cert = '';
 
+    protected $key = '';
+
+    protected $password = '';
+
+    /**
+     * @return CipherInterface
+     */
+    public function getCipher(): CipherInterface
+    {
+        return $this->cipher;
+    }
+
+    /**
+     * @param  CipherInterface  $cipher
+     * @return self
+     */
+    public function setCipher(CipherInterface $cipher)
+    {
+        $this->cipher = $cipher;
+
+        return $this;
+    }
+
     /**
      * Base64 of certificate
      *
@@ -87,6 +127,26 @@ class BankID extends AbstractProvider
     public function getCert(): string
     {
         return $this->cert;
+    }
+
+    /**
+     * Private key binary
+     *
+     * @return string
+     */
+    public function getKey(): string
+    {
+        return $this->key;
+    }
+
+    /**
+     * Private key password
+     *
+     * @return string
+     */
+    public function getPassword(): string
+    {
+        return $this->password;
     }
 
     /**
@@ -185,7 +245,7 @@ class BankID extends AbstractProvider
                 ],
                 'body'    => json_encode(
                     [
-                        'cert'      => $this->getCert(),
+                        'cert'      => base64_encode($this->getCert()),
                         'type'      => 'physical',
                         'fields'    => $this->getFields(),
                         'addresses' => $this->getAddresses(),
@@ -230,9 +290,6 @@ class BankID extends AbstractProvider
      */
     protected function checkResponse(ResponseInterface $response, $data)
     {
-        //TODO: remove, DEBUG!
-        var_dump((string)$response->getBody());
-
         // Standard error response format
         if (!empty($data['error'])) {
             throw BankIDIdentityProviderException::clientException($response, $data);
@@ -248,21 +305,18 @@ class BankID extends AbstractProvider
      */
     protected function createResourceOwner(array $response, AccessToken $token)
     {
-        // TODO: decode data
-        return new BankIDResourceOwner($response);
-    }
+        $decoded = [
+            'memberId' => $response['memberId'],
+            'sidBi'    => $response['sidBi'],
+            'data'     => json_decode(
+                $this->getCipher()->decode(
+                    $response['customerCrypto'],
+                    $response['cert']
+                ),
+                true
+            ),
+        ];
 
-    /**
-     * Sets host.
-     *
-     * @param  string  $host
-     *
-     * @return string
-     */
-    public function setHost($host)
-    {
-        $this->host = $host;
-
-        return $this;
+        return new BankIDResourceOwner($decoded);
     }
 }
