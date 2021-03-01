@@ -24,7 +24,7 @@ class BankIDIdentityProviderException extends IdentityProviderException
     {
         $message = $response->getReasonPhrase();
         $code = $response->getStatusCode();
-        $body = (string)$response->getBody();
+        $body = $response->getBody();
 
         if (isset($data['error_description'])) {
             $message = $data['error_description'];
@@ -33,6 +33,6 @@ class BankIDIdentityProviderException extends IdentityProviderException
             $code = $data['code'];
         }
 
-        return new static($message, $code, $body);
+        return new static((string) $message, (int) $code, (string) $body);
     }
 }
